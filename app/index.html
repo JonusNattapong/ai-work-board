@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ai-work-board</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #171a21; --line: #262b35; --text: #e6e9ef;
+    --muted: #8b93a3; --accent: #6ea8fe;
+    --queued: #7d8596; --running: #4f9cf9; --review: #e2a33a; --done: #3fb27f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 24px; border-bottom: 1px solid var(--line);
+  }
+  h1 { font-size: 16px; margin: 0; letter-spacing: .3px; }
+  h1 span { color: var(--muted); font-weight: 400; }
+  main {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+    padding: 24px; align-items: start;
+  }
+  .col { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-height: 120px; }
+  .col h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .1em;
+    margin: 0 0 10px; color: var(--muted); display: flex; justify-content: space-between;
+  }
+  .count { background: #222735; border-radius: 20px; padding: 1px 8px; }
+  .card {
+    background: #1d212a; border: 1px solid var(--line); border-left: 3px solid var(--queued);
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+  }
+  .col[data-status="running"] .card { border-left-color: var(--running); }
+  .col[data-status="review"] .card { border-left-color: var(--review); }
+  .col[data-status="done"] .card { border-left-color: var(--done); }
+  .title { font-weight: 600; margin-bottom: 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px; color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  .tag { background: #262b35; border-radius: 4px; padding: 1px 6px; }
+  .bar { height: 5px; background: #262b35; border-radius: 3px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--running); }
+  .pct { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .log { margin: 8px 0 0; padding: 0 0 0 14px; color: var(--muted); font-size: 12px; }
+  .log li { margin: 2px 0; }
+  #err { padding: 0 24px; color: var(--review); }
+</style>
+</head>
+<body>
+<header>
+  <h1>ai-work-board <span>· local-first kanban</span></h1>
+  <button id="reload">รีเฟรช</button>
+</header>
+<p id="err"></p>
+<main id="board"></main>
+
+<script>
+const STATUSES = ["queued", "running", "review", "done"];
+const board = document.getElementById("board");
+const err = document.getElementById("err");
+
+for (const s of STATUSES) {
+  const col = document.createElement("section");
+  col.className = "col";
+  col.dataset.status = s;
+  col.innerHTML = `<h2>${s}<span class="count" data-count="${s}">0</span></h2><div class="list"></div>`;
+  board.appendChild(col);
+}
+
+function render(tasks) {
+  for (const s of STATUSES) {
+    const list = board.querySelector(`.col[data-status="${s}"] .list`);
+    const items = tasks.filter(t => t.status === s);
+    board.querySelector(`[data-count="${s}"]`).textContent = items.length;
+    list.innerHTML = items.map(t => `
+      <article class="card">
+        <div class="title">#${t.id} ${escapeHtml(t.title)}</div>
+        <div class="meta">
+          ${t.agent ? `<span class="tag">${escapeHtml(t.agent)}</span>` : ""}
+          ${t.type ? `<span class="tag">${escapeHtml(t.type)}</span>` : ""}
+          ${t.prio ? `<span class="tag">${escapeHtml(t.prio)}</span>` : ""}
+        </div>
+        <div class="bar"><i style="width:${Number(t.progress) || 0}%"></i></div>
+        <div class="pct">${Number(t.progress) || 0}% · ${escapeHtml(t.updated || "")}</div>
+        ${t.log && t.log.length ? `<ul class="log">${t.log.map(l => `<li>${escapeHtml(l)}</li>`).join("")}</ul>` : ""}
+      </article>`).join("");
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+async function load() {
+  err.textContent = "";
+  try {
+    const res = await fetch("/api/tasks.json", { cache: "no-store" });
+    if (!res.ok) throw new Error(res.status);
+    render(await res.json());
+  } catch (e) {
+    err.textContent = "เปิดผ่าน `python3 cli/task.py serve` แล้วรีเฟรชอีกครั้ง (fetch ไม่ผ่านเมื่อเปิดไฟล์ตรง ๆ)";
+  }
+}
+
+document.getElementById("reload").addEventListener("click", load);
+load();
+setInterval(load, 5000);
+</script>
+</body>
+</html>
